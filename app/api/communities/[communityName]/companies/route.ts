@@ -24,7 +24,7 @@ export async function POST(
       );
     }
     
-    const communityName = decodeURIComponent(resolvedParams.communityName);
+    const communityIdentifier = decodeURIComponent(resolvedParams.communityName);
 
     // Require either companyId or companyName
     if (!companyId && (!companyName || !companyName.trim())) {
@@ -34,14 +34,14 @@ export async function POST(
       );
     }
 
-    if (!communityName || !communityName.trim() || communityName === 'undefined') {
+    if (!communityIdentifier || !communityIdentifier.trim() || communityIdentifier === 'undefined') {
       return NextResponse.json(
-        { error: 'Invalid community name' },
+        { error: 'Invalid community identifier' },
         { status: 400 }
       );
     }
 
-    const trimmedCommunityName = communityName.trim();
+    const trimmedCommunityIdentifier = communityIdentifier.trim();
 
     // Find company by ID if provided, otherwise by name
     let company;
@@ -68,19 +68,32 @@ export async function POST(
       }
     }
 
-    // Find or create community (case-insensitive search, but preserve original case)
-    let community = await Community.findOne({ 
-      name: { $regex: new RegExp(`^${trimmedCommunityName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
-    });
+    // Find community by ID if it's a valid MongoDB ObjectId, otherwise by name
+    let community;
+    if (mongoose.Types.ObjectId.isValid(trimmedCommunityIdentifier)) {
+      // Try to find by ID first
+      community = await Community.findById(trimmedCommunityIdentifier);
+    }
     
+    // If not found by ID or not a valid ObjectId, try to find by name
     if (!community) {
-      // Create community if it doesn't exist
-      community = new Community({
-        name: trimmedCommunityName,
-        companies: [],
+      const trimmedCommunityName = trimmedCommunityIdentifier;
+      // Find or create community (case-insensitive search, but preserve original case)
+      community = await Community.findOne({ 
+        name: { $regex: new RegExp(`^${trimmedCommunityName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
       });
-      await community.save();
-    } else {
+      
+      if (!community) {
+        // Create community if it doesn't exist
+        community = new Community({
+          name: trimmedCommunityName,
+          companies: [],
+        });
+        await community.save();
+      }
+    }
+    
+    if (community) {
       // Migration: Convert any string company names to ObjectIds if needed
       const companyNamesToMigrate = community.companies.filter((c: any) => typeof c === 'string');
       if (companyNamesToMigrate.length > 0) {
@@ -188,7 +201,7 @@ export async function DELETE(
     
     // Handle params as either Promise or direct object (for Next.js version compatibility)
     const resolvedParams = params instanceof Promise ? await params : params;
-    const communityName = decodeURIComponent(resolvedParams.communityName);
+    const communityIdentifier = decodeURIComponent(resolvedParams.communityName);
 
     if (!companyId && !companyName) {
       return NextResponse.json(
@@ -221,9 +234,20 @@ export async function DELETE(
       }
     }
 
-    const community = await Community.findOne({ 
-      name: { $regex: new RegExp(`^${communityName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
-    });
+    // Find community by ID if it's a valid MongoDB ObjectId, otherwise by name
+    let community;
+    if (mongoose.Types.ObjectId.isValid(communityIdentifier)) {
+      // Try to find by ID first
+      community = await Community.findById(communityIdentifier);
+    }
+    
+    // If not found by ID or not a valid ObjectId, try to find by name
+    if (!community) {
+      const trimmedCommunityName = communityIdentifier.trim();
+      community = await Community.findOne({ 
+        name: { $regex: new RegExp(`^${trimmedCommunityName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
+      });
+    }
     
     if (!community) {
       return NextResponse.json(

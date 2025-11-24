@@ -57,13 +57,13 @@ Return a JSON object with a "plans" array. Each plan object should have:
 Return ONLY valid JSON, no additional text.`;
 
   // Call OpenAI API with gpt-4o-search-preview model for AI web scraping
+
+  console.log('Prompt:', prompt);
   const completion = await openai.responses.create({
-    model: 'gpt-5',
+    model: 'o4-mini',
     tools: [
       { type: "web_search" },
     ],
-    // tool_choice: "auto",
-    // web_search_options: {},
     input: [
       {
         role: 'system',

@@ -15,6 +15,7 @@ import { Badge } from "./ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
 import { Plus, Loader2, Sparkles, Search } from "lucide-react";
 import ErrorMessage from "./ErrorMessage";
+import ScrapingDialog from "./ScrapingDialog";
 import API_URL from '../config';
 
 interface AddCompanyModalProps {
@@ -59,6 +60,8 @@ export default function AddCompanyModal({ onSuccess, trigger, autoAddToCommunity
   const [selectedCompany, setSelectedCompany] = useState<CompanyRecommendation | null>(null);
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [activeTab, setActiveTab] = useState("ai");
+  const [showScrapingDialog, setShowScrapingDialog] = useState(false);
+  const [scrapingCompanyName, setScrapingCompanyName] = useState<string>("");
 
   const resetForm = () => {
     setName("");
@@ -72,6 +75,8 @@ export default function AddCompanyModal({ onSuccess, trigger, autoAddToCommunity
     setSelectedCompany(null);
     setShowRecommendations(false);
     setActiveTab("ai");
+    setShowScrapingDialog(false);
+    setScrapingCompanyName("");
   };
 
   const handleClose = () => {
@@ -147,9 +152,9 @@ export default function AddCompanyModal({ onSuccess, trigger, autoAddToCommunity
       if ((autoAddToCommunityId || autoAddToCommunity) && data._id) {
         try {
           // Use communityId if available, otherwise fall back to communityName
-          const url = autoAddToCommunityId
-            ? API_URL + `/communities/${autoAddToCommunityId}/companies`
-            : API_URL + `/communities/${encodeURIComponent(autoAddToCommunity!.trim())}/companies`;
+          // The route now handles both IDs and names
+          const identifier = autoAddToCommunityId || encodeURIComponent(autoAddToCommunity!.trim());
+          const url = API_URL + `/communities/${identifier}/companies`;
           
           const addToCommunityRes = await fetch(url, {
             method: "POST",
@@ -163,6 +168,14 @@ export default function AddCompanyModal({ onSuccess, trigger, autoAddToCommunity
             const addError = await addToCommunityRes.json();
             console.warn("Failed to add company to community:", addError);
             // Don't throw - company was created successfully, just failed to add to community
+          } else {
+            // Company was successfully added to community, trigger scraping
+            if (autoAddToCommunity) {
+              setScrapingCompanyName(data.name);
+              setShowScrapingDialog(true);
+              handleClose();
+              return; // Don't call onSuccess yet, wait for scraping to complete
+            }
           }
         } catch (addError) {
           console.warn("Error adding company to community:", addError);
@@ -605,6 +618,26 @@ export default function AddCompanyModal({ onSuccess, trigger, autoAddToCommunity
           )}
         </div>
       </DialogContent>
+
+      {/* Scraping Dialog - only show when auto-adding to community */}
+      {autoAddToCommunity && scrapingCompanyName && (
+        <ScrapingDialog
+          open={showScrapingDialog}
+          onOpenChange={(open) => {
+            setShowScrapingDialog(open);
+            if (!open && onSuccess) {
+              onSuccess(scrapingCompanyName);
+            }
+          }}
+          companyName={scrapingCompanyName}
+          communityName={autoAddToCommunity}
+          onComplete={() => {
+            if (onSuccess) {
+              onSuccess(scrapingCompanyName);
+            }
+          }}
+        />
+      )}
     </Dialog>
   );
 }

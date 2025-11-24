@@ -11,6 +11,7 @@ export async function GET() {
     
     // Get all communities from the database (without populate first to handle mixed types)
     const communities = await Community.find().sort({ name: 1 });
+    console.log(communities);
     
     // Migrate and populate companies for each community
     for (const community of communities) {

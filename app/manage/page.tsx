@@ -88,9 +88,9 @@ export default function ManagePage() {
       const queryParam = company ? `companyId=${company._id}` : `company=${encodeURIComponent(companyName)}`;
       
       // Use communityId if available, otherwise fall back to communityName
-      const url = community._id
-        ? API_URL + `/communities/${community._id}/companies?${queryParam}`
-        : API_URL + `/communities/${encodeURIComponent(community.name)}/companies?${queryParam}`;
+      // The route now handles both IDs and names
+      const identifier = community._id || encodeURIComponent(community.name);
+      const url = API_URL + `/communities/${identifier}/companies?${queryParam}`;
       
       const res = await fetch(url, {
         method: "DELETE",

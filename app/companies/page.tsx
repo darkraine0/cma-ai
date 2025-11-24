@@ -78,12 +78,7 @@ export default function CompaniesPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold leading-none tracking-tight">Companies</h1>
-          <p className="text-sm text-muted-foreground">Manage home building companies</p>
-        </div>
 
-        {/* Add Company Section */}
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-semibold leading-none tracking-tight">Companies</h2>

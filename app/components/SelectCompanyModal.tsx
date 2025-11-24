@@ -15,6 +15,7 @@ import { Badge } from "./ui/badge";
 import { Plus, Search, Loader2 } from "lucide-react";
 import ErrorMessage from "./ErrorMessage";
 import AddCompanyModal from "./AddCompanyModal";
+import ScrapingDialog from "./ScrapingDialog";
 import API_URL from '../config';
 import { getCompanyColor } from '../utils/colors';
 
@@ -50,6 +51,8 @@ export default function SelectCompanyModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [addingCompanyId, setAddingCompanyId] = useState<string | null>(null);
   const [showAddCompanyModal, setShowAddCompanyModal] = useState(false);
+  const [showScrapingDialog, setShowScrapingDialog] = useState(false);
+  const [scrapingCompanyName, setScrapingCompanyName] = useState<string>("");
 
   useEffect(() => {
     if (open) {
@@ -109,9 +112,9 @@ export default function SelectCompanyModal({
     setError("");
     try {
       // Use communityId if available, otherwise fall back to communityName
-      const url = communityId 
-        ? API_URL + `/communities/${communityId}/companies`
-        : API_URL + `/communities/${encodeURIComponent(communityName!.trim())}/companies`;
+      // The route now handles both IDs and names
+      const identifier = communityId || encodeURIComponent(communityName!.trim());
+      const url = API_URL + `/communities/${identifier}/companies`;
       
       const res = await fetch(url, {
         method: "POST",
@@ -138,11 +141,11 @@ export default function SelectCompanyModal({
         throw new Error(errorMessage);
       }
 
+      // Company added successfully, now trigger scraping
       setOpen(false);
       setSearchQuery("");
-      if (onSuccess) {
-        onSuccess();
-      }
+      setScrapingCompanyName(company.name);
+      setShowScrapingDialog(true);
     } catch (err: any) {
       setError(err.message || "Unknown error");
     } finally {
@@ -324,6 +327,26 @@ export default function SelectCompanyModal({
           <div style={{ display: "none" }} />
         }
       />
+
+      {/* Scraping Dialog */}
+      {communityName && (
+        <ScrapingDialog
+          open={showScrapingDialog}
+          onOpenChange={(open) => {
+            setShowScrapingDialog(open);
+            if (!open && onSuccess) {
+              onSuccess();
+            }
+          }}
+          companyName={scrapingCompanyName}
+          communityName={communityName}
+          onComplete={() => {
+            if (onSuccess) {
+              onSuccess();
+            }
+          }}
+        />
+      )}
     </>
   );
 }
