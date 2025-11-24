@@ -42,9 +42,14 @@ const DialogTrigger = React.forwardRef<HTMLButtonElement, DialogTriggerProps>(
     const { onOpenChange } = React.useContext(DialogContext)
 
     if (asChild && React.isValidElement(children)) {
-      return React.cloneElement(children as React.ReactElement, {
-        onClick: () => onOpenChange(true),
-      })
+      const childProps = children.props as { onClick?: (e: React.MouseEvent) => void }
+      return React.cloneElement(children as React.ReactElement<any>, {
+        ...childProps,
+        onClick: (e: React.MouseEvent) => {
+          childProps.onClick?.(e)
+          onOpenChange(true)
+        },
+      } as any)
     }
 
     return (
@@ -169,22 +174,33 @@ const DialogDescription = React.forwardRef<HTMLParagraphElement, DialogDescripti
 )
 DialogDescription.displayName = "DialogDescription"
 
-interface DialogCloseProps {
+interface DialogCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   children?: React.ReactNode
   className?: string
 }
 
 const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
-  ({ className, ...props }, ref) => {
+  ({ className, onClick, ...props }, ref) => {
     const { onOpenChange } = React.useContext(DialogContext)
+
+    const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+      if (props.disabled) {
+        e.preventDefault()
+        return
+      }
+      if (onClick) {
+        onClick(e)
+      }
+      onOpenChange(false)
+    }
 
     return (
       <button
         ref={ref}
         type="button"
-        onClick={() => onOpenChange(false)}
+        onClick={handleClick}
         className={cn(
-          "absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none",
+          "absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
           className
         )}
         {...props}

@@ -4,22 +4,43 @@ import Plan from '@/app/models/Plan';
 import PriceHistory from '@/app/models/PriceHistory';
 import Company from '@/app/models/Company';
 import Community from '@/app/models/Community';
+import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
     
+    // Get query parameters
+    const { searchParams } = new URL(request.url);
+    const communityId = searchParams.get('communityId');
+    
     // Calculate timestamp for 24 hours ago
     const since = new Date();
     since.setHours(since.getHours() - 24);
     
-    // Get all plans
-    const plans = await Plan.find({
+    // Build query filter
+    const queryFilter: any = {
       plan_name: { $exists: true, $ne: null },
       price: { $exists: true, $ne: null },
       'company.name': { $exists: true, $ne: null },
       'community.name': { $exists: true, $ne: null },
-    }).sort({ last_updated: -1 });
+    };
+    
+    // Filter by community ID if provided
+    if (communityId) {
+      // Validate that communityId is a valid MongoDB ObjectId
+      if (mongoose.Types.ObjectId.isValid(communityId)) {
+        queryFilter['community._id'] = new mongoose.Types.ObjectId(communityId);
+      } else {
+        return NextResponse.json(
+          { error: 'Invalid community ID format' },
+          { status: 400 }
+        );
+      }
+    }
+    
+    // Get plans (filtered by community if communityId provided)
+    const plans = await Plan.find(queryFilter).sort({ last_updated: -1 });
 
     // Get recent price changes
     const recentChanges = await PriceHistory.find({

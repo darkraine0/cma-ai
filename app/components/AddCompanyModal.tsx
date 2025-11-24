@@ -267,7 +267,7 @@ export default function AddCompanyModal({ onSuccess, trigger, autoAddToCommunity
         <DialogHeader>
           <DialogTitle>Add New Company</DialogTitle>
         </DialogHeader>
-        <DialogClose onClick={handleClose} />
+        <DialogClose />
 
         <div className="space-y-4 mt-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>

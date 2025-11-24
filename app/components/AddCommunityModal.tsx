@@ -186,7 +186,7 @@ export default function AddCommunityModal({ onSuccess, trigger }: AddCommunityMo
               : "Search for Union Main Homes communities using AI or create a new one manually."}
           </DialogDescription> */}
         </DialogHeader>
-        <DialogClose onClick={handleClose} />
+        <DialogClose />
 
         <div className="space-y-4 mt-4">
           <Tabs value={activeTab} onValueChange={setActiveTab}>

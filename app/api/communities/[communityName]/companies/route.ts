@@ -256,17 +256,48 @@ export async function DELETE(
       );
     }
 
-    // Remove company from community (using company ID)
-    community.companies = community.companies.filter(
-      (companyId: any) => companyId.toString() !== company._id.toString()
-    );
-    await community.save();
+    // Ensure company._id is a proper ObjectId
+    let companyObjectId: mongoose.Types.ObjectId;
+    if (company._id instanceof mongoose.Types.ObjectId) {
+      companyObjectId = company._id;
+    } else if (typeof company._id === 'string' && mongoose.Types.ObjectId.isValid(company._id)) {
+      companyObjectId = new mongoose.Types.ObjectId(company._id);
+    } else {
+      return NextResponse.json(
+        { error: 'Invalid company ID format' },
+        { status: 400 }
+      );
+    }
 
-    // Populate companies before returning
-    await community.populate('companies');
+    // Use MongoDB's $pull operator to remove the company ID (more reliable than filtering)
+    const updateResult = await Community.updateOne(
+      { _id: community._id },
+      { $pull: { companies: companyObjectId } }
+    );
+
+    if (updateResult.matchedCount === 0) {
+      return NextResponse.json(
+        { error: 'Community not found' },
+        { status: 404 }
+      );
+    }
+
+    // Reload community from database and populate companies to return updated data
+    const updatedCommunity = await Community.findById(community._id).populate({
+      path: 'companies',
+      model: 'Company',
+      select: 'name _id',
+    });
+
+    if (!updatedCommunity) {
+      return NextResponse.json(
+        { error: 'Failed to retrieve updated community after removal' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json(
-      { message: 'Company removed from community successfully', community },
+      { message: 'Company removed from community successfully', community: updatedCommunity },
       { status: 200 }
     );
   } catch (error: any) {
