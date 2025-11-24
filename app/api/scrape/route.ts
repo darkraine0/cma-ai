@@ -3,6 +3,8 @@ import OpenAI from 'openai';
 import connectDB from '@/app/lib/mongodb';
 import Plan from '@/app/models/Plan';
 import PriceHistory from '@/app/models/PriceHistory';
+import Company from '@/app/models/Company';
+import Community from '@/app/models/Community';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -150,11 +152,37 @@ Return ONLY valid JSON, no additional text.`;
         price_per_sqft = Math.round((planData.price / planData.sqft) * 100) / 100;
       }
 
-      // Find existing plan
+      // Find or create Company
+      let companyDoc = await Company.findOne({ name: company.trim() });
+      if (!companyDoc) {
+        companyDoc = new Company({ name: company.trim() });
+        await companyDoc.save();
+      }
+
+      // Find or create Community
+      let communityDoc = await Community.findOne({ name: community.trim() });
+      if (!communityDoc) {
+        communityDoc = new Community({ name: community.trim() });
+        await communityDoc.save();
+      }
+
+      // Prepare embedded company and community objects
+      const companyRef = {
+        _id: companyDoc._id,
+        name: companyDoc.name,
+      };
+
+      const communityRef = {
+        _id: communityDoc._id,
+        name: communityDoc.name,
+        location: communityDoc.location,
+      };
+
+      // Find existing plan using embedded structure
       const existingPlan = await Plan.findOne({
         plan_name: planData.plan_name,
-        company: company,
-        community: community,
+        'company.name': company.trim(),
+        'community.name': community.trim(),
         type: type,
       });
 
@@ -173,6 +201,7 @@ Return ONLY valid JSON, no additional text.`;
           // Update plan
           existingPlan.price = planData.price;
           existingPlan.last_updated = new Date();
+          existingPlan.price_changed_recently = true;
         }
 
         // Update other fields
@@ -184,18 +213,22 @@ Return ONLY valid JSON, no additional text.`;
         if (planData.address !== undefined) existingPlan.address = planData.address;
         if (planData.design_number !== undefined) existingPlan.design_number = planData.design_number;
 
+        // Update embedded references in case company/community metadata changed
+        existingPlan.company = companyRef;
+        existingPlan.community = communityRef;
+
         await existingPlan.save();
         savedPlans.push(existingPlan);
       } else {
-        // Create new plan
+        // Create new plan with embedded structure
         const newPlan = new Plan({
           plan_name: planData.plan_name,
           price: planData.price,
           sqft: planData.sqft,
           stories: planData.stories,
           price_per_sqft: price_per_sqft,
-          company: company,
-          community: community,
+          company: companyRef,
+          community: communityRef,
           type: type,
           beds: planData.beds?.toString(),
           baths: planData.baths?.toString(),
@@ -294,8 +327,8 @@ export async function POST(request: NextRequest) {
         id: p._id,
         plan_name: p.plan_name,
         price: p.price,
-        company: p.company,
-        community: p.community,
+        company: typeof p.company === 'object' ? p.company.name : p.company,
+        community: typeof p.community === 'object' ? p.community.name : p.community,
         type: p.type,
       })),
     });

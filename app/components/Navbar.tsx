@@ -39,12 +39,12 @@ const Navbar = () => (
               Companies
             </Button>
           </Link>
-          <Link href="/scrape">
+          <Link href="/manage">
             <Button 
               variant="outline"
               className="bg-card text-card-foreground border-border hover:bg-muted hover:text-muted-foreground font-semibold"
             >
-              Scrape
+              Manage
             </Button>
           </Link>
           <ThemeToggle />
