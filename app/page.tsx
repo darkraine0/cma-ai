@@ -71,7 +71,16 @@ export default function Communities() {
       // Map communities data to include statistics from plans
       const communityData: Community[] = communitiesData.map(comm => {
         const plansForCommunity = communityPlansMap.get(comm.name) || [];
-        const companies = comm.companies || Array.from(new Set(plansForCommunity.map(p => typeof p.company === 'string' ? p.company : (p.company as any)?.name || p.company)));
+        // Extract company names from the companies array (handle both object and string formats)
+        const companyNames = (comm.companies || []).map((c: any) => {
+          if (typeof c === 'string') return c;
+          if (c && typeof c === 'object' && c.name) return c.name;
+          return '';
+        }).filter((name: string) => name);
+        // Fallback to extracting from plans if no companies in community
+        const companies = companyNames.length > 0 
+          ? companyNames 
+          : Array.from(new Set(plansForCommunity.map(p => typeof p.company === 'string' ? p.company : (p.company as any)?.name || p.company)));
         const prices = plansForCommunity.map(p => p.price).filter(p => p > 0);
         const recentChanges = plansForCommunity.filter(p => p.price_changed_recently).length;
         const totalPlans = plansForCommunity.filter(p => p.type === 'plan').length;

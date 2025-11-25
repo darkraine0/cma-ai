@@ -21,9 +21,14 @@ interface Company {
   founded?: string;
 }
 
+interface CommunityCompany {
+  _id: string;
+  name: string;
+}
+
 interface Community {
   name: string;
-  companies: string[];
+  companies: string[] | CommunityCompany[]; // Can be either format for backward compatibility
   fromPlans?: boolean;
   description?: string;
   location?: string;
@@ -292,31 +297,37 @@ export default function ManagePage() {
                         <p className="text-sm text-muted-foreground py-2">No companies yet. Add one below.</p>
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                          {community.companies.map((companyName) => (
-                            <div
-                              key={companyName}
-                              className="flex items-center justify-between p-3 bg-muted rounded-md"
-                            >
-                              <div className="flex items-center gap-2 flex-1">
-                                <span
-                                  className="inline-block w-3 h-3 rounded-full border"
-                                  style={{
-                                    backgroundColor: getCompanyColor(companyName),
-                                    borderColor: getCompanyColor(companyName),
-                                  }}
-                                />
-                                <span className="text-sm font-medium">{companyName}</span>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRemoveCompanyFromCommunity(community, companyName)}
-                                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          {community.companies.map((company) => {
+                            // Handle both string and object formats
+                            const companyName = typeof company === 'string' ? company : company.name;
+                            const companyKey = typeof company === 'string' ? company : company._id;
+                            
+                            return (
+                              <div
+                                key={companyKey}
+                                className="flex items-center justify-between p-3 bg-muted rounded-md"
                               >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
+                                <div className="flex items-center gap-2 flex-1">
+                                  <span
+                                    className="inline-block w-3 h-3 rounded-full border"
+                                    style={{
+                                      backgroundColor: getCompanyColor(companyName),
+                                      borderColor: getCompanyColor(companyName),
+                                    }}
+                                  />
+                                  <span className="text-sm font-medium">{companyName}</span>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleRemoveCompanyFromCommunity(community, companyName)}
+                                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -328,7 +339,7 @@ export default function ManagePage() {
                         <SelectCompanyModal
                           communityId={community._id || undefined}
                           communityName={community.name}
-                          existingCompanies={community.companies}
+                          existingCompanies={community.companies.map(c => typeof c === 'string' ? c : c.name)}
                           onSuccess={() => {
                             fetchCommunities();
                             setError("");
