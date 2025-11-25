@@ -1,36 +1,73 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/mongodb';
 import Community from '@/app/models/Community';
+import Company from '@/app/models/Company'; // Import to ensure model is registered
 
 export async function GET() {
   try {
+    // Check if MongoDB URI is configured
+    if (!process.env.MONGODB_URI) {
+      console.error('MONGODB_URI environment variable is not set');
+      return NextResponse.json(
+        { 
+          error: 'Database configuration error', 
+          message: 'MONGODB_URI is not configured. Please check your environment variables.' 
+        },
+        { status: 500 }
+      );
+    }
+
     await connectDB();
     
     // Get all communities and populate companies
+    // Import Company model ensures it's registered for populate
     const communities = await Community.find()
       .sort({ name: 1 })
       .populate({
         path: 'companies',
-        model: 'Company',
         select: 'name _id',
       });
     
     // Map to response format
-    const result = communities.map(community => ({
+    const result = communities.map((community: any) => ({
       _id: community._id.toString(),
       name: community.name,
-      description: community.description,
-      location: community.location,
-      companies: community.companies.map((c: any) => 
-        typeof c === 'object' && c?.name ? c.name : String(c)
-      ),
+      description: community.description || null,
+      location: community.location || null,
+      companies: (community.companies || []).map((c: any) => {
+        // Handle populated companies (objects) or ObjectIds (strings)
+        if (c && typeof c === 'object' && c.name) {
+          return c.name;
+        }
+        // If populate failed or is an ObjectId, return empty string
+        return typeof c === 'string' ? c : '';
+      }).filter((name: string) => name), // Filter out empty strings
       fromPlans: false, // All communities from database are not from plans
     }));
     
     return NextResponse.json(result);
   } catch (error: any) {
+    // Log detailed error for debugging (server-side only)
+    console.error('Error fetching communities:', {
+      message: error.message,
+      name: error.name,
+      code: error.code,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+
+    // Provide user-friendly error message
+    let errorMessage = 'Failed to fetch communities';
+    if (error.message?.includes('MONGODB_URI')) {
+      errorMessage = 'Database configuration error';
+    } else if (error.message?.includes('timeout') || error.message?.includes('ECONNREFUSED')) {
+      errorMessage = 'Database connection failed. Please check your database configuration.';
+    }
+
     return NextResponse.json(
-      { error: 'Failed to fetch communities', message: error.message },
+      { 
+        error: errorMessage, 
+        message: process.env.NODE_ENV === 'development' ? error.message : 'An error occurred while fetching communities'
+      },
       { status: 500 }
     );
   }
