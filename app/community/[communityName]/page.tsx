@@ -32,10 +32,22 @@ type SortKey = "plan_name" | "price" | "sqft" | "last_updated";
 type SortOrder = "asc" | "desc";
 const PAGE_SIZE = 50;
 
+interface CommunityCompany {
+  _id: string;
+  name: string;
+}
+
+interface Community {
+  _id: string;
+  name: string;
+  companies: CommunityCompany[];
+}
+
 export default function CommunityDetail() {
   const params = useParams();
   const router = useRouter();
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [community, setCommunity] = useState<Community | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("price");
@@ -44,25 +56,54 @@ export default function CommunityDetail() {
   const [selectedCompany, setSelectedCompany] = useState<string>('All');
   const [selectedType, setSelectedType] = useState<string>('Now');
 
-  const communityName = params?.communityName as string;
-  const decodedCommunityName = communityName ? decodeURIComponent(communityName) : '';
+  const communitySlug = params?.communityName as string;
+  const decodedSlug = communitySlug ? decodeURIComponent(communitySlug).toLowerCase() : '';
+
+  const fetchCommunity = async () => {
+    try {
+      const res = await fetch(API_URL + "/communities");
+      if (!res.ok) throw new Error("Failed to fetch communities");
+      const communities: Community[] = await res.json();
+      
+      // Find the community where the first word matches the slug (case-insensitive)
+      const foundCommunity = communities.find(comm => {
+        const firstWord = comm.name.split(' ')[0].toLowerCase();
+        return firstWord === decodedSlug;
+      });
+      
+      if (foundCommunity) {
+        setCommunity(foundCommunity);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch community:", err);
+    }
+  };
 
   const fetchPlans = async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(API_URL + "/plans");
-      if (!res.ok) throw new Error("Failed to fetch plans");
-      const data: Plan[] = await res.json();
-      
-      // Filter plans for this specific community (case-insensitive) - handle both string and object formats
-      const communityPlans = data.filter(plan => {
-        const planCommunity = typeof plan.community === 'string' ? plan.community : (plan.community as any)?.name || plan.community;
-        return planCommunity.toLowerCase() === decodedCommunityName.toLowerCase();
-      });
+      // Use the optimized endpoint with community ID
+      if (community?._id) {
+        const res = await fetch(`${API_URL}/communities/${community._id}/plans`);
+        if (!res.ok) throw new Error("Failed to fetch plans");
+        const data: Plan[] = await res.json();
+        setPlans(data);
+      } else {
+        // Fallback: fetch all plans and filter if community not found yet
+        const res = await fetch(API_URL + "/plans");
+        if (!res.ok) throw new Error("Failed to fetch plans");
+        const data: Plan[] = await res.json();
+        
+        // Filter plans for this specific community (case-insensitive)
+        const communityPlans = data.filter(plan => {
+          const planCommunity = typeof plan.community === 'string' ? plan.community : (plan.community as any)?.name || plan.community;
+          const planFirstWord = planCommunity.split(' ')[0].toLowerCase();
+          return planFirstWord === decodedSlug;
+        });
 
-      console.log(communityPlans);
-      setPlans(communityPlans);
+        setPlans(communityPlans);
+      }
     } catch (err: any) {
       setError(err.message || "Unknown error");
     } finally {
@@ -71,24 +112,37 @@ export default function CommunityDetail() {
   };
 
   useEffect(() => {
-    if (decodedCommunityName) {
+    if (decodedSlug) {
+      fetchCommunity();
+    }
+  }, [decodedSlug]);
+
+  // Fetch plans after community is loaded (so we can use the _id)
+  // Only fetch if we have the community _id to use the optimized endpoint
+  useEffect(() => {
+    if (decodedSlug && community?._id) {
       fetchPlans();
       // const interval = setInterval(fetchPlans, 60 * 1000); // Refresh every 1 min
       // return () => clearInterval(interval);
     }
-  }, [decodedCommunityName]);
+  }, [decodedSlug, community?._id]);
 
   useEffect(() => {
     setPage(1); // Reset to first page on filter/sort change
   }, [sortKey, sortOrder, selectedCompany, selectedType]);
 
-  const companies = Array.from(new Set(plans.map((p) => {
-    return typeof p.company === 'string' ? p.company : (p.company as any)?.name || p.company;
-  })));
+  // Only use companies from the community record - don't extract from plans
+  const companies = community?.companies?.map(c => c.name) || [];
+  const companyNamesSet = new Set(companies);
 
   const filteredPlans = plans.filter((plan) => {
     const planCompany = typeof plan.company === 'string' ? plan.company : (plan.company as any)?.name || plan.company;
-    return (selectedCompany === 'All' || planCompany === selectedCompany) &&
+    
+    // Only show plans from companies that are in the community's companies array
+    const isCompanyInCommunity = companyNamesSet.has(planCompany);
+    
+    return isCompanyInCommunity &&
+      (selectedCompany === 'All' || planCompany === selectedCompany) &&
       (selectedType === 'Plan' || selectedType === 'Now' ? plan.type === selectedType.toLowerCase() : true);
   });
 
@@ -150,14 +204,14 @@ export default function CommunityDetail() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `${decodedCommunityName}-plans.csv`);
+    link.setAttribute("download", `${community?.name || 'community'}-plans.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  if (!decodedCommunityName) {
+  if (!decodedSlug) {
     return <ErrorMessage message="Community not found" />;
   }
 
@@ -170,7 +224,7 @@ export default function CommunityDetail() {
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               {/* Left side - Community name */}
               <div className="flex-1">
-                <CardTitle>{decodedCommunityName}</CardTitle>
+                <CardTitle>{community?.name || decodedSlug}</CardTitle>
                 <p className="text-sm text-muted-foreground">Home plans and pricing information</p>
               </div>
             
@@ -183,7 +237,7 @@ export default function CommunityDetail() {
             <div className="flex justify-end flex-1">
               <div className="flex gap-2">
                 <Button 
-                  onClick={() => router.push(`/community/${encodeURIComponent(decodedCommunityName)}/chart?type=${selectedType.toLowerCase()}`)}
+                  onClick={() => router.push(`/community/${decodedSlug}/chart?type=${selectedType.toLowerCase()}`)}
                 >
                   <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
