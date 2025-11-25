@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import API_URL from '../../config';
 import { getCompanyColor } from '../../utils/colors';
+import { getCommunityImage } from '../../utils/communityImages';
 
 interface Plan {
   plan_name: string;
@@ -229,6 +230,14 @@ export default function CommunityDetail() {
       <div className="container mx-auto p-4">
         {/* Main Card/Table */}
         <Card>
+          <div className="relative overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={getCommunityImage(decodedSlug)}
+              alt={community?.name || decodedSlug}
+              className="w-full h-64 object-cover"
+            />
+          </div>
           <CardHeader>
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
               {/* Left side - Community name */}

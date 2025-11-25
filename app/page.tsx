@@ -9,6 +9,7 @@ import { Badge } from "./components/ui/badge";
 import AddCommunityModal from "./components/AddCommunityModal";
 import API_URL from './config';
 import { getCompanyColor } from './utils/colors';
+import { getCommunityImage } from './utils/communityImages';
 
 interface Plan {
   plan_name: string;
@@ -153,12 +154,10 @@ export default function Communities() {
               onClick={() => handleCommunityClick(community)}
               className="cursor-pointer overflow-auto"
             >
-              <div className="relative overflow-hidden">
+              <div className="relative overflow-hidden h-48">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={
-                    'https://elevontx.com/wp-content/uploads/2024/01/UnionMain50Model.jpeg.webp'
-                  }
+                  src={getCommunityImage(community.name)}
                   alt={community.name}
                   className="w-full h-full object-cover"
                 />
