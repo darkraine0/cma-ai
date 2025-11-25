@@ -6,7 +6,8 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import Loader from "../components/Loader";
 import ErrorMessage from "../components/ErrorMessage";
-import { Plus, ExternalLink, Trash2 } from "lucide-react";
+import AddCompanyModal from "../components/AddCompanyModal";
+import { ExternalLink, Trash2 } from "lucide-react";
 import API_URL from '../config';
 
 interface Company {
@@ -24,9 +25,6 @@ export default function CompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [addingCompany, setAddingCompany] = useState(false);
-  const [newCompanyName, setNewCompanyName] = useState("");
-  const [isAddingAI, setIsAddingAI] = useState(false);
   const [deletingCompanyId, setDeletingCompanyId] = useState<string | null>(null);
 
   const fetchCompanies = async () => {
@@ -48,69 +46,6 @@ export default function CompaniesPage() {
     fetchCompanies();
   }, []);
 
-  const handleAddCompany = async () => {
-    if (!newCompanyName.trim()) {
-      setError("Please enter a company name");
-      return;
-    }
-
-    setAddingCompany(true);
-    setError("");
-    try {
-      const res = await fetch(API_URL + "/companies", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: newCompanyName.trim() }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to add company");
-      }
-
-      setNewCompanyName("");
-      await fetchCompanies();
-    } catch (err: any) {
-      setError(err.message || "Unknown error");
-    } finally {
-      setAddingCompany(false);
-    }
-  };
-
-  const handleAddCompanyWithAI = async () => {
-    if (!newCompanyName.trim()) {
-      setError("Please enter a company name");
-      return;
-    }
-
-    setIsAddingAI(true);
-    setError("");
-    try {
-      const res = await fetch(API_URL + "/companies/ai", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ companyName: newCompanyName.trim() }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to add company with AI");
-      }
-
-      setNewCompanyName("");
-      await fetchCompanies();
-    } catch (err: any) {
-      setError(err.message || "Unknown error");
-    } finally {
-      setIsAddingAI(false);
-    }
-  };
 
   const handleDeleteCompany = async (companyId: string, companyName: string) => {
     if (!window.confirm(`Are you sure you want to delete "${companyName}"? This action cannot be undone.`)) {
@@ -143,58 +78,27 @@ export default function CompaniesPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold leading-none tracking-tight">Companies</h1>
-          <p className="text-sm text-muted-foreground">Manage home building companies</p>
+
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold leading-none tracking-tight">Companies</h2>
+            <p className="text-sm text-muted-foreground">Manage home building companies</p>
+          </div>
+          <AddCompanyModal 
+            onSuccess={() => {
+              fetchCompanies();
+              setError("");
+            }}
+          />
         </div>
 
-        {/* Add Company Section */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Add New Company</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2 flex-wrap">
-              <input
-                type="text"
-                value={newCompanyName}
-                onChange={(e) => setNewCompanyName(e.target.value)}
-                placeholder="Enter company name..."
-                className="flex-1 min-w-[200px] px-3 py-2 rounded-md border-2 border-border bg-card text-card-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                onKeyPress={(e) => {
-                  if (e.key === "Enter") {
-                    handleAddCompany();
-                  }
-                }}
-              />
-              {/* <Button
-                onClick={handleAddCompany}
-                disabled={addingCompany || !newCompanyName.trim()}
-                variant="outline"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add
-              </Button> */}
-              <Button
-                onClick={handleAddCompanyWithAI}
-                disabled={isAddingAI || !newCompanyName.trim()}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                {isAddingAI ? "Adding with AI..." : "Add with AI"}
-              </Button>
-            </div>
-            {error && (
-              <div className="mt-4">
-                <ErrorMessage message={error} />
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {error && (
+          <div className="mb-4">
+            <ErrorMessage message={error} />
+          </div>
+        )}
 
         {/* Companies List */}
-        {error && !addingCompany && !isAddingAI && (
-          <ErrorMessage message={error} />
-        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {companies.map((company) => (

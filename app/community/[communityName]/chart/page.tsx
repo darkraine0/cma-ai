@@ -61,8 +61,11 @@ export default function ChartPage() {
         if (!res.ok) throw new Error("Failed to fetch plans");
         const data = await res.json();
         
-        // Filter plans for this specific community
-        const communityPlans = data.filter((plan: Plan) => plan.community === decodedCommunityName);
+        // Filter plans for this specific community - handle both string and object formats
+        const communityPlans = data.filter((plan: Plan) => {
+          const planCommunity = typeof plan.community === 'string' ? plan.community : (plan.community as any)?.name || plan.community;
+          return planCommunity === decodedCommunityName;
+        });
         setPlans(communityPlans);
       } catch (err: any) {
         setError(err.message || "Unknown error");
@@ -85,12 +88,17 @@ export default function ChartPage() {
     selectedType === 'Plan' || selectedType === 'Now' ? plan.type === selectedType.toLowerCase() : true
   );
 
-  // Get all companies present in filtered data
-  const companies = Array.from(new Set(filteredPlans.map((p) => p.company)));
+  // Get all companies present in filtered data - handle both string and object formats
+  const companies = Array.from(new Set(filteredPlans.map((p) => {
+    return typeof p.company === 'string' ? p.company : (p.company as any)?.name || p.company;
+  })));
 
   // Prepare datasets for each company
   const datasets = companies.map((company) => {
-    const filtered = filteredPlans.filter((p) => p.company === company && p.sqft && p.price);
+    const filtered = filteredPlans.filter((p) => {
+      const planCompany = typeof p.company === 'string' ? p.company : (p.company as any)?.name || p.company;
+      return planCompany === company && p.sqft && p.price;
+    });
     // Sort by sqft for a smooth line
     const sorted = filtered.sort((a, b) => a.sqft - b.sqft);
     return {

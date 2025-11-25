@@ -6,6 +6,7 @@ import Loader from "./components/Loader";
 import ErrorMessage from "./components/ErrorMessage";
 import { Card, CardContent, CardHeader, CardTitle } from "./components/ui/card";
 import { Badge } from "./components/ui/badge";
+import AddCommunityModal from "./components/AddCommunityModal";
 import API_URL from './config';
 import { getCompanyColor } from './utils/colors';
 
@@ -30,6 +31,10 @@ interface Community {
   avgPrice: number;
   priceRange: { min: number; max: number };
   recentChanges: number;
+  description?: string;
+  location?: string;
+  _id?: string | null;
+  fromPlans?: boolean;
 }
 
 export default function Communities() {
@@ -42,30 +47,38 @@ export default function Communities() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch(API_URL + "/plans");
-      if (!res.ok) throw new Error("Failed to fetch plans");
-      const plans: Plan[] = await res.json();
+      // Fetch communities from the API (includes both database communities and plan-derived ones)
+      const communitiesRes = await fetch(API_URL + "/communities");
+      if (!communitiesRes.ok) throw new Error("Failed to fetch communities");
+      const communitiesData: any[] = await communitiesRes.json();
       
-      // Group plans by community
-      const communityMap = new Map<string, Plan[]>();
+      // Fetch plans to calculate statistics for each community
+      const plansRes = await fetch(API_URL + "/plans");
+      if (!plansRes.ok) throw new Error("Failed to fetch plans");
+      const plans: Plan[] = await plansRes.json();
+      
+      // Group plans by community for statistics
+      const communityPlansMap = new Map<string, Plan[]>();
       plans.forEach(plan => {
-        if (!communityMap.has(plan.community)) {
-          communityMap.set(plan.community, []);
+        const communityName = typeof plan.community === 'string' ? plan.community : (plan.community as any)?.name || plan.community;
+        if (!communityPlansMap.has(communityName)) {
+          communityPlansMap.set(communityName, []);
         }
-        communityMap.get(plan.community)!.push(plan);
+        communityPlansMap.get(communityName)!.push(plan);
       });
 
-      // Convert to Community objects
-      const communityData: Community[] = Array.from(communityMap.entries()).map(([name, plans]) => {
-        const companies = Array.from(new Set(plans.map(p => p.company)));
-        const prices = plans.map(p => p.price).filter(p => p > 0);
-        const recentChanges = plans.filter(p => p.price_changed_recently).length;
-        const totalPlans = plans.filter(p => p.type === 'plan').length;
-        const totalNow = plans.filter(p => p.type === 'now').length;
+      // Map communities data to include statistics from plans
+      const communityData: Community[] = communitiesData.map(comm => {
+        const plansForCommunity = communityPlansMap.get(comm.name) || [];
+        const companies = comm.companies || Array.from(new Set(plansForCommunity.map(p => typeof p.company === 'string' ? p.company : (p.company as any)?.name || p.company)));
+        const prices = plansForCommunity.map(p => p.price).filter(p => p > 0);
+        const recentChanges = plansForCommunity.filter(p => p.price_changed_recently).length;
+        const totalPlans = plansForCommunity.filter(p => p.type === 'plan').length;
+        const totalNow = plansForCommunity.filter(p => p.type === 'now').length;
         
         return {
-          name,
-          companies,
+          name: comm.name,
+          companies: companies.length > 0 ? companies : [],
           totalPlans,
           totalNow,
           avgPrice: prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0,
@@ -73,7 +86,11 @@ export default function Communities() {
             min: prices.length > 0 ? Math.min(...prices) : 0,
             max: prices.length > 0 ? Math.max(...prices) : 0
           },
-          recentChanges
+          recentChanges,
+          description: comm.description,
+          location: comm.location,
+          _id: comm._id,
+          fromPlans: comm.fromPlans || false,
         };
       });
 
@@ -101,9 +118,16 @@ export default function Communities() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold leading-none tracking-tight">Communities</h1>
-          <p className="text-sm text-muted-foreground">Explore home plans by community</p>
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold leading-none tracking-tight">Communities</h1>
+            <p className="text-sm text-muted-foreground">Explore home plans by community</p>
+          </div>
+          <AddCommunityModal 
+            onSuccess={() => {
+              fetchCommunities();
+            }}
+          />
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

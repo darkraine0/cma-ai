@@ -1,4 +1,17 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, Types } from 'mongoose';
+
+// Embedded company reference
+interface ICompanyReference {
+  _id: Types.ObjectId;
+  name: string;
+}
+
+// Embedded community reference
+interface ICommunityReference {
+  _id: Types.ObjectId;
+  name: string;
+  location?: string;
+}
 
 export interface IPlan extends Document {
   plan_name: string;
@@ -7,8 +20,8 @@ export interface IPlan extends Document {
   stories?: string;
   price_per_sqft?: number;
   last_updated: Date;
-  company: string;
-  community: string;
+  company: ICompanyReference;
+  community: ICommunityReference;
   type: 'plan' | 'now';
   beds?: string;
   baths?: string;
@@ -18,6 +31,33 @@ export interface IPlan extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const CompanyReferenceSchema = new Schema<ICompanyReference>({
+  _id: {
+    type: Schema.Types.ObjectId,
+    ref: 'Company',
+    required: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+}, { _id: false });
+
+const CommunityReferenceSchema = new Schema<ICommunityReference>({
+  _id: {
+    type: Schema.Types.ObjectId,
+    ref: 'Community',
+    required: true,
+  },
+  name: {
+    type: String,
+    required: true,
+  },
+  location: {
+    type: String,
+  },
+}, { _id: false });
 
 const PlanSchema = new Schema<IPlan>(
   {
@@ -44,14 +84,12 @@ const PlanSchema = new Schema<IPlan>(
       default: Date.now,
     },
     company: {
-      type: String,
+      type: CompanyReferenceSchema,
       required: true,
-      index: true,
     },
     community: {
-      type: String,
+      type: CommunityReferenceSchema,
       required: true,
-      index: true,
     },
     type: {
       type: String,
@@ -82,8 +120,16 @@ const PlanSchema = new Schema<IPlan>(
   }
 );
 
-// Compound index for uniqueness
-PlanSchema.index({ plan_name: 1, company: 1, community: 1, type: 1 }, { unique: true });
+// Indexes for efficient queries
+PlanSchema.index({ 'company._id': 1, 'community._id': 1, type: 1 });
+PlanSchema.index({ 'company.name': 1, type: 1 });
+PlanSchema.index({ 'community.name': 1, type: 1 });
+PlanSchema.index({ 'community._id': 1, type: 1 });
+PlanSchema.index({ price: 1 });
+PlanSchema.index({ last_updated: -1 });
+
+// Compound index for uniqueness (using embedded names)
+PlanSchema.index({ plan_name: 1, 'company.name': 1, 'community.name': 1, type: 1 }, { unique: true });
 
 export default mongoose.models.Plan || mongoose.model<IPlan>('Plan', PlanSchema);
 

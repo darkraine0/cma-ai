@@ -18,44 +18,34 @@ export async function POST(request: NextRequest) {
 
     await connectDB();
     const body = await request.json();
-    const { companyName } = body;
+    const { searchQuery } = body;
 
-    if (!companyName) {
+    if (!searchQuery) {
       return NextResponse.json(
-        { error: 'Company name is required' },
+        { error: 'Search query is required' },
         { status: 400 }
       );
     }
 
-    // Check if company already exists
-    const existingCompany = await Company.findOne({ 
-      name: { $regex: new RegExp(`^${companyName.trim()}$`, 'i') } 
-    });
-    if (existingCompany) {
-      return NextResponse.json(
-        { error: 'Company already exists', company: existingCompany },
-        { status: 409 }
-      );
-    }
-
-    // Fetch company information from OpenAI
+    // Fetch company recommendations from OpenAI
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo-preview',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
-          content: 'You are a helpful assistant that provides information about home building companies. Provide accurate, factual information in JSON format. Return ONLY valid JSON, no additional text.',
+          content: 'You are a helpful assistant that searches and recommends home building companies. Provide accurate, factual information in JSON format. Return ONLY valid JSON, no additional text. Always return an array of companies, even if there is only one match.',
         },
         {
           role: 'user',
-          content: `Provide information about the home building company "${companyName}". Return a JSON object with the following fields: name (exact company name), description (brief overview of the company), website (official website URL if known, otherwise null), headquarters (city and state, e.g., "Dallas, Texas"), and founded (year founded if known, otherwise null). Only return the JSON object, no additional text.`,
+          content: `Search for home building companies matching "${searchQuery}". This could be a partial name, location, or description. Return a JSON object with a "companies" array. Each company object should have: name (exact company name), description (brief overview of the company), website (official website URL if known, otherwise null), headquarters (city and state, e.g., "Dallas, Texas"), and founded (year founded if known, otherwise null). Return up to 8 most relevant home building companies. If the search term is very specific, still return an array with matching companies. Only return the JSON object, no additional text.`,
         },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.3,
+      temperature: 0.5,
     });
 
     const aiResponse = completion.choices[0]?.message?.content;
+
     if (!aiResponse) {
       return NextResponse.json(
         { error: 'Failed to get response from OpenAI' },
@@ -63,9 +53,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let companyData;
+    let responseData;
     try {
-      companyData = JSON.parse(aiResponse);
+      responseData = JSON.parse(aiResponse);
     } catch (parseError) {
       return NextResponse.json(
         { error: 'Failed to parse AI response', details: aiResponse },
@@ -73,29 +63,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Ensure the name matches what was requested
-    companyData.name = companyName.trim();
-
-    // Create the company in database
-    const company = new Company({
-      name: companyData.name,
-      description: companyData.description || null,
-      website: companyData.website || null,
-      headquarters: companyData.headquarters || null,
-      founded: companyData.founded || null,
-    });
-
-    await company.save();
-    return NextResponse.json(company, { status: 201 });
-  } catch (error: any) {
-    if (error.code === 11000) {
+    if (!Array.isArray(responseData.companies)) {
       return NextResponse.json(
-        { error: 'Company already exists' },
-        { status: 409 }
+        { error: 'AI response did not contain a valid companies array', details: responseData },
+        { status: 500 }
       );
     }
-    
-    // Handle OpenAI API errors
+
+    // Check which companies already exist
+    const existingCompanies = await Company.find({
+      name: { $in: responseData.companies.map((c: any) => c.name) }
+    }).select('name');
+
+    const existingNames = new Set(existingCompanies.map(c => c.name.toLowerCase()));
+
+    const companiesWithStatus = responseData.companies.map((company: any) => ({
+      ...company,
+      alreadyExists: existingNames.has(company.name.toLowerCase()),
+    }));
+
+    return NextResponse.json({ companies: companiesWithStatus }, { status: 200 });
+  } catch (error: any) {
     if (error.response) {
       return NextResponse.json(
         { error: 'OpenAI API error', message: error.response.data?.error?.message || error.message },
@@ -104,7 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Failed to create company with AI', message: error.message },
+      { error: 'Failed to search companies with AI', message: error.message },
       { status: 500 }
     );
   }

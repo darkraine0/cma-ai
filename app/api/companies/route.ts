@@ -21,41 +21,68 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, description, website, headquarters, founded } = body;
 
-    if (!name) {
+    if (!name || !name.trim()) {
       return NextResponse.json(
         { error: 'Company name is required' },
         { status: 400 }
       );
     }
 
-    // Check if company already exists
-    const existingCompany = await Company.findOne({ name: name.trim() });
+    const trimmedName = name.trim();
+
+    // Check if company already exists (case-insensitive)
+    // Escape special regex characters in the name
+    const escapedName = trimmedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const existingCompany = await Company.findOne({ 
+      name: { $regex: new RegExp(`^${escapedName}$`, 'i') }
+    });
     if (existingCompany) {
       return NextResponse.json(
-        { error: 'Company already exists' },
+        { error: 'Company already exists', existingCompany },
         { status: 409 }
       );
     }
 
-    const company = new Company({
-      name: name.trim(),
-      description,
-      website,
-      headquarters,
-      founded,
-    });
+    // Prepare company data - only include fields that have values
+    const companyData: any = {
+      name: trimmedName,
+    };
+
+    if (description && String(description).trim()) {
+      companyData.description = String(description).trim();
+    }
+    if (website && String(website).trim()) {
+      companyData.website = String(website).trim();
+    }
+    if (headquarters && String(headquarters).trim()) {
+      companyData.headquarters = String(headquarters).trim();
+    }
+    if (founded) {
+      // Convert to string and trim (founded might be a number from AI)
+      const foundedStr = String(founded).trim();
+      if (foundedStr) {
+        companyData.founded = foundedStr;
+      }
+    }
+
+    const company = new Company(companyData);
 
     await company.save();
     return NextResponse.json(company, { status: 201 });
   } catch (error: any) {
+    console.error('Error creating company:', error);
     if (error.code === 11000) {
       return NextResponse.json(
-        { error: 'Company already exists' },
+        { error: 'Company already exists', message: 'A company with this name already exists in the database' },
         { status: 409 }
       );
     }
     return NextResponse.json(
-      { error: 'Failed to create company', message: error.message },
+      { 
+        error: 'Failed to create company', 
+        message: error.message || 'Unknown error occurred',
+        details: error.stack 
+      },
       { status: 500 }
     );
   }

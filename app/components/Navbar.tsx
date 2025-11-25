@@ -23,14 +23,6 @@ const Navbar = () => (
                 Communities
               </Button>
             </Link>
-            <Link href="/dashboard">
-              <Button 
-                variant="outline"
-                className="bg-card text-card-foreground border-border hover:bg-muted hover:text-muted-foreground font-semibold"
-              >
-              All Plans
-            </Button>
-          </Link>
           <Link href="/companies">
             <Button 
               variant="outline"
@@ -39,12 +31,12 @@ const Navbar = () => (
               Companies
             </Button>
           </Link>
-          <Link href="/scrape">
+          <Link href="/manage">
             <Button 
               variant="outline"
               className="bg-card text-card-foreground border-border hover:bg-muted hover:text-muted-foreground font-semibold"
             >
-              Scrape
+              Manage
             </Button>
           </Link>
           <ThemeToggle />

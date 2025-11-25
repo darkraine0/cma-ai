@@ -66,12 +66,15 @@ export default function Dashboard() {
     setPage(1); // Reset to first page on filter/sort change
   }, [sortKey, sortOrder, selectedCompany, selectedType]);
 
-  const companies = Array.from(new Set(plans.map((p) => p.company)));
+  const companies = Array.from(new Set(plans.map((p) => {
+    return typeof p.company === 'string' ? p.company : (p.company as any)?.name || p.company;
+  })));
 
-  const filteredPlans = plans.filter((plan) =>
-    (selectedCompany === 'All' || plan.company === selectedCompany) &&
-    (selectedType === 'Plan' || selectedType === 'Now' ? plan.type === selectedType.toLowerCase() : true)
-  );
+  const filteredPlans = plans.filter((plan) => {
+    const planCompany = typeof plan.company === 'string' ? plan.company : (plan.company as any)?.name || plan.company;
+    return (selectedCompany === 'All' || planCompany === selectedCompany) &&
+      (selectedType === 'Plan' || selectedType === 'Now' ? plan.type === selectedType.toLowerCase() : true);
+  });
 
   const sortedPlans = [...filteredPlans].sort((a, b) => {
     let aValue: any = a[sortKey];
@@ -119,7 +122,7 @@ export default function Dashboard() {
       plan.stories,
       plan.price_per_sqft,
       plan.last_updated,
-      plan.company,
+      typeof plan.company === 'string' ? plan.company : (plan.company as any)?.name || plan.company,
       plan.community,
       plan.type,
       plan.price_changed_recently ? "Yes" : "No"
@@ -220,12 +223,13 @@ export default function Dashboard() {
                       </TableCell>
                       <TableCell className="flex items-center gap-2">
                         {(() => {
-                          const color = getCompanyColor(plan.company);
+                          const planCompany = typeof plan.company === 'string' ? plan.company : (plan.company as any)?.name || plan.company;
+                          const color = getCompanyColor(planCompany);
                           return <span className="inline-block w-3 h-3 rounded-full border" style={{ backgroundColor: color, borderColor: color }}></span>;
                         })()}
-                        {plan.company}
+                        {typeof plan.company === 'string' ? plan.company : (plan.company as any)?.name || plan.company}
                       </TableCell>
-                      <TableCell>{plan.community}</TableCell>
+                      <TableCell>{typeof plan.community === 'string' ? plan.community : (plan.community as any)?.name || plan.community}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{new Date(plan.last_updated).toLocaleString()}</TableCell>
                     </TableRow>
                   ))}

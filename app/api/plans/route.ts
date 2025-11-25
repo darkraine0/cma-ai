@@ -2,22 +2,45 @@ import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/mongodb';
 import Plan from '@/app/models/Plan';
 import PriceHistory from '@/app/models/PriceHistory';
+import Company from '@/app/models/Company';
+import Community from '@/app/models/Community';
+import mongoose from 'mongoose';
 
 export async function GET(request: NextRequest) {
   try {
     await connectDB();
     
+    // Get query parameters
+    const { searchParams } = new URL(request.url);
+    const communityId = searchParams.get('communityId');
+    
     // Calculate timestamp for 24 hours ago
     const since = new Date();
     since.setHours(since.getHours() - 24);
     
-    // Get all plans
-    const plans = await Plan.find({
+    // Build query filter
+    const queryFilter: any = {
       plan_name: { $exists: true, $ne: null },
       price: { $exists: true, $ne: null },
-      company: { $exists: true, $ne: null },
-      community: { $exists: true, $ne: null },
-    }).sort({ last_updated: -1 });
+      'company.name': { $exists: true, $ne: null },
+      'community.name': { $exists: true, $ne: null },
+    };
+    
+    // Filter by community ID if provided
+    if (communityId) {
+      // Validate that communityId is a valid MongoDB ObjectId
+      if (mongoose.Types.ObjectId.isValid(communityId)) {
+        queryFilter['community._id'] = new mongoose.Types.ObjectId(communityId);
+      } else {
+        return NextResponse.json(
+          { error: 'Invalid community ID format' },
+          { status: 400 }
+        );
+      }
+    }
+    
+    // Get plans (filtered by community if communityId provided)
+    const plans = await Plan.find(queryFilter).sort({ last_updated: -1 });
 
     // Get recent price changes
     const recentChanges = await PriceHistory.find({
@@ -28,7 +51,7 @@ export async function GET(request: NextRequest) {
       recentChanges.map((ph) => ph.plan_id.toString())
     );
 
-    // Map to response format
+    // Map to response format - maintain backward compatibility with string format
     const result = plans.map((plan) => ({
       plan_name: plan.plan_name,
       price: plan.price,
@@ -36,8 +59,11 @@ export async function GET(request: NextRequest) {
       stories: plan.stories || null,
       price_per_sqft: plan.price_per_sqft || null,
       last_updated: plan.last_updated,
-      company: plan.company,
-      community: plan.community,
+      // Return both embedded object and string for backward compatibility
+      company: plan.company?.name || plan.company,
+      companyObj: plan.company,
+      community: plan.community?.name || plan.community,
+      communityObj: plan.community,
       type: plan.type,
       address: plan.address || null,
       price_changed_recently: changedPlanIds.has(plan._id.toString()),
@@ -76,15 +102,45 @@ export async function POST(request: NextRequest) {
         design_number,
       } = data;
 
-      if (!plan_name || !price || !company || !community) {
+      // Support both string (legacy) and object format
+      const companyName = typeof company === 'string' ? company : company?.name || company;
+      const communityName = typeof community === 'string' ? community : community?.name || community;
+
+      if (!plan_name || !price || !companyName || !communityName) {
         continue;
       }
 
-      // Find existing plan
+      // Find or create Company
+      let companyDoc = await Company.findOne({ name: companyName.trim() });
+      if (!companyDoc) {
+        companyDoc = new Company({ name: companyName.trim() });
+        await companyDoc.save();
+      }
+
+      // Find or create Community
+      let communityDoc = await Community.findOne({ name: communityName.trim() });
+      if (!communityDoc) {
+        communityDoc = new Community({ name: communityName.trim() });
+        await communityDoc.save();
+      }
+
+      // Prepare embedded company and community objects
+      const companyRef = {
+        _id: companyDoc._id,
+        name: companyDoc.name,
+      };
+
+      const communityRef = {
+        _id: communityDoc._id,
+        name: communityDoc.name,
+        location: communityDoc.location,
+      };
+
+      // Find existing plan using embedded structure
       const existingPlan = await Plan.findOne({
         plan_name,
-        company,
-        community,
+        'company.name': companyName.trim(),
+        'community.name': communityName.trim(),
         type,
       });
 
@@ -103,6 +159,7 @@ export async function POST(request: NextRequest) {
           // Update plan
           existingPlan.price = price;
           existingPlan.last_updated = new Date();
+          existingPlan.price_changed_recently = true;
         }
 
         // Update other fields
@@ -114,18 +171,22 @@ export async function POST(request: NextRequest) {
         if (address !== undefined) existingPlan.address = address;
         if (design_number !== undefined) existingPlan.design_number = design_number;
 
+        // Update embedded references in case company/community metadata changed
+        existingPlan.company = companyRef;
+        existingPlan.community = communityRef;
+
         await existingPlan.save();
         results.push(existingPlan);
       } else {
-        // Create new plan
+        // Create new plan with embedded structure
         const newPlan = new Plan({
           plan_name,
           price,
           sqft,
           stories,
           price_per_sqft,
-          company,
-          community,
+          company: companyRef,
+          community: communityRef,
           type,
           beds,
           baths,
