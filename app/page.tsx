@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Loader from "./components/Loader";
 import ErrorMessage from "./components/ErrorMessage";
@@ -42,6 +42,7 @@ export default function Communities() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const router = useRouter();
+  const hasFetched = useRef(false);
 
   const fetchCommunities = async () => {
     setLoading(true);
@@ -103,13 +104,19 @@ export default function Communities() {
   };
 
   useEffect(() => {
+    // Prevent duplicate calls in React StrictMode (development)
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+    
     fetchCommunities();
     // const interval = setInterval(fetchCommunities, 60 * 1000); // Refresh every 1 min
     // return () => clearInterval(interval);
   }, []);
 
-  const handleCommunityClick = (communityName: string) => {
-    router.push(`/community/${encodeURIComponent(communityName)}`);
+  const handleCommunityClick = (community: Community) => {
+    // Use the first word of the community name as the URL slug
+    const firstWord = community.name.split(' ')[0].toLowerCase();
+    router.push(`/community/${firstWord}`);
   };
 
   if (loading) return <Loader />;
@@ -134,7 +141,7 @@ export default function Communities() {
           {communities.map((community) => (
             <Card
               key={community.name}
-              onClick={() => handleCommunityClick(community.name)}
+              onClick={() => handleCommunityClick(community)}
               className="cursor-pointer overflow-auto"
             >
               <div className="relative overflow-hidden">

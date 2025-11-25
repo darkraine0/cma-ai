@@ -1,30 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/app/lib/mongodb';
 import Community from '@/app/models/Community';
-import Company from '@/app/models/Company'; // Import to ensure model is registered
+import Company from '@/app/models/Company';
+import mongoose from 'mongoose';
 
 export async function GET() {
   try {
-    // Check if MongoDB URI is configured
-    if (!process.env.MONGODB_URI) {
-      console.error('MONGODB_URI environment variable is not set');
-      return NextResponse.json(
-        { 
-          error: 'Database configuration error', 
-          message: 'MONGODB_URI is not configured. Please check your environment variables.' 
-        },
-        { status: 500 }
-      );
-    }
-
     await connectDB();
     
-    // Get all communities and populate companies
-    // Import Company model ensures it's registered for populate
+    // Ensure Company model is registered on the connection
+    // In Next.js serverless, models need to be accessed after connection
+    if (!mongoose.models.Company) {
+      // Force model registration by accessing the imported model
+      // This triggers the model registration in Company.ts
+      Company;
+    }
+    
     const communities = await Community.find()
       .sort({ name: 1 })
       .populate({
         path: 'companies',
+        model: mongoose.models.Company,
         select: 'name _id',
       });
     
@@ -34,14 +30,19 @@ export async function GET() {
       name: community.name,
       description: community.description || null,
       location: community.location || null,
-      companies: (community.companies || []).map((c: any) => {
-        // Handle populated companies (objects) or ObjectIds (strings)
-        if (c && typeof c === 'object' && c.name) {
-          return c.name;
-        }
-        // If populate failed or is an ObjectId, return empty string
-        return typeof c === 'string' ? c : '';
-      }).filter((name: string) => name), // Filter out empty strings
+      companies: (community.companies || [])
+        .map((c: any) => {
+          // Handle populated companies (objects with _id and name)
+          if (c && typeof c === 'object' && c._id && c.name) {
+            return {
+              _id: c._id.toString(),
+              name: c.name,
+            };
+          }
+          // If populate failed or is an ObjectId, skip it
+          return null;
+        })
+        .filter((company: any) => company !== null), // Filter out null entries
       fromPlans: false, // All communities from database are not from plans
     }));
     
