@@ -35,6 +35,17 @@ interface Plan {
   type: string;
 }
 
+interface CommunityCompany {
+  _id: string;
+  name: string;
+}
+
+interface Community {
+  _id: string;
+  name: string;
+  companies: CommunityCompany[];
+}
+
 
 
 export default function ChartPage() {
@@ -42,6 +53,7 @@ export default function ChartPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [community, setCommunity] = useState<Community | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   
@@ -49,49 +61,104 @@ export default function ChartPage() {
   const urlType = searchParams?.get('type');
   const [selectedType, setSelectedType] = useState<string>(urlType === 'plan' ? 'Plan' : 'Now');
 
-  const communityName = params?.communityName as string;
-  const decodedCommunityName = communityName ? decodeURIComponent(communityName) : '';
+  const communitySlug = params?.communityName as string;
+  const decodedSlug = communitySlug ? decodeURIComponent(communitySlug).toLowerCase() : '';
 
-  useEffect(() => {
-    const fetchPlans = async () => {
-      setLoading(true);
-      setError("");
-      try {
+  const fetchCommunity = async () => {
+    try {
+      const res = await fetch(API_URL + "/communities");
+      if (!res.ok) throw new Error("Failed to fetch communities");
+      const communities: Community[] = await res.json();
+      
+      // Find the community where the first word matches the slug (case-insensitive)
+      const foundCommunity = communities.find(comm => {
+        const firstWord = comm.name.split(' ')[0].toLowerCase();
+        return firstWord === decodedSlug;
+      });
+      
+      if (foundCommunity) {
+        setCommunity(foundCommunity);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch community:", err);
+    }
+  };
+
+  const fetchPlans = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      // Use the optimized endpoint with community ID
+      if (community?._id) {
+        const res = await fetch(`${API_URL}/communities/${community._id}/plans`);
+        if (!res.ok) throw new Error("Failed to fetch plans");
+        const data: Plan[] = await res.json();
+        setPlans(data);
+      } else {
+        // Fallback: fetch all plans and filter if community not found yet
         const res = await fetch(API_URL + "/plans");
         if (!res.ok) throw new Error("Failed to fetch plans");
-        const data = await res.json();
+        const data: Plan[] = await res.json();
         
-        // Filter plans for this specific community - handle both string and object formats
-        const communityPlans = data.filter((plan: Plan) => {
+        // Filter plans for this specific community (case-insensitive) - match by first word
+        const communityPlans = data.filter(plan => {
           const planCommunity = typeof plan.community === 'string' ? plan.community : (plan.community as any)?.name || plan.community;
-          return planCommunity === decodedCommunityName;
+          const planFirstWord = planCommunity.split(' ')[0].toLowerCase();
+          return planFirstWord === decodedSlug;
         });
+
         setPlans(communityPlans);
-      } catch (err: any) {
-        setError(err.message || "Unknown error");
-      } finally {
-        setLoading(false);
       }
-    };
-    
-    if (decodedCommunityName) {
+    } catch (err: any) {
+      setError(err.message || "Unknown error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (decodedSlug) {
+      fetchCommunity();
+    }
+  }, [decodedSlug]);
+
+  // Fetch plans after community is loaded (so we can use the _id)
+  useEffect(() => {
+    if (decodedSlug && community?._id) {
       fetchPlans();
     }
-  }, [decodedCommunityName]);
+  }, [decodedSlug, community?._id]);
 
-  if (!decodedCommunityName) {
+  if (!decodedSlug) {
     return <ErrorMessage message="Community not found" />;
   }
 
-  // Filter plans by selected type
-  const filteredPlans = plans.filter((plan) => 
-    selectedType === 'Plan' || selectedType === 'Now' ? plan.type === selectedType.toLowerCase() : true
-  );
+  // Only use companies from the community record - don't extract from plans
+  // Handle both object format {_id, name} and string format
+  const communityCompanies = community?.companies?.map(c => {
+    if (typeof c === 'string') {
+      return c;
+    }
+    if (c && typeof c === 'object' && c.name) {
+      return c.name;
+    }
+    return '';
+  }).filter(name => name) || [];
+  const companyNamesSet = new Set(communityCompanies);
 
-  // Get all companies present in filtered data - handle both string and object formats
-  const companies = Array.from(new Set(filteredPlans.map((p) => {
-    return typeof p.company === 'string' ? p.company : (p.company as any)?.name || p.company;
-  })));
+  // Filter plans by selected type and only from companies in the community
+  const filteredPlans = plans.filter((plan) => {
+    const planCompany = typeof plan.company === 'string' ? plan.company : (plan.company as any)?.name || plan.company;
+    
+    // Only show plans from companies that are in the community's companies array
+    const isCompanyInCommunity = companyNamesSet.has(planCompany);
+    
+    return isCompanyInCommunity &&
+      (selectedType === 'Plan' || selectedType === 'Now' ? plan.type === selectedType.toLowerCase() : true);
+  });
+
+  // Use companies from the community record
+  const companies = communityCompanies;
 
   // Prepare datasets for each company
   const datasets = companies.map((company) => {
@@ -130,7 +197,7 @@ export default function ChartPage() {
       },
       title: {
         display: true,
-        text: `${decodedCommunityName} - Price vs Sqft by Company - ${selectedType} Homes`,
+        text: `${community?.name || decodedSlug} - Price vs Sqft by Company - ${selectedType} Homes`,
         color: "#2563eb",
         font: { size: 18, weight: "bold" },
       },
@@ -164,10 +231,10 @@ export default function ChartPage() {
         <Card>
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle>{decodedCommunityName} - Price Analysis</CardTitle>
+              <CardTitle>{community?.name || decodedSlug} - Price Analysis</CardTitle>
               <div className="flex gap-4">
               <Button 
-                onClick={() => router.push(`/community/${encodeURIComponent(decodedCommunityName)}`)}
+                onClick={() => router.push(`/community/${decodedSlug}`)}
                 variant="outline"
               >
                 ← Back to Community
@@ -189,7 +256,7 @@ export default function ChartPage() {
             <div>
               {filteredPlans.length === 0 ? (
                 <div className="text-center py-12">
-                  <p className="text-lg text-muted-foreground">No {selectedType.toLowerCase()} homes found in {decodedCommunityName} to display in the chart.</p>
+                  <p className="text-lg text-muted-foreground">No {selectedType.toLowerCase()} homes found in {community?.name || decodedSlug} to display in the chart.</p>
                 </div>
               ) : (
                 <Line data={data} options={options} />

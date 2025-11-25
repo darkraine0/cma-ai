@@ -132,7 +132,16 @@ export default function CommunityDetail() {
   }, [sortKey, sortOrder, selectedCompany, selectedType]);
 
   // Only use companies from the community record - don't extract from plans
-  const companies = community?.companies?.map(c => c.name) || [];
+  // Handle both object format {_id, name} and string format
+  const companies = community?.companies?.map(c => {
+    if (typeof c === 'string') {
+      return c;
+    }
+    if (c && typeof c === 'object' && c.name) {
+      return c.name;
+    }
+    return '';
+  }).filter(name => name) || [];
   const companyNamesSet = new Set(companies);
 
   const filteredPlans = plans.filter((plan) => {
